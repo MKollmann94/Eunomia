@@ -13,6 +13,7 @@ using DelimitedFiles
 using CSV
 using Suppressor
 using SparseArrays
+using Distributions
 
 ##########################################################################################
 
@@ -30,6 +31,11 @@ export eunomia
 
 const FILEPATH = @__DIR__
 
+##########################################################################################
+
+#### 	DOWKER FUNCTIONS
+
+##########################################################################################
 
 function eunomia(M)
     n, m = size(M)
@@ -46,21 +52,6 @@ function eunomia(M)
     return C
 end
 
-
-#=
-    returns the number of simplices for each dimension (up to 3)
-=#
-function numOfSimplices(M)
-    n, m = size(M)
-    ev = []
-
-    for k in 1 : 4
-        push!(ev, binomial(m, k))
-    end
-    push!(ev, 0)
-
-    return ev
-end
 
 #=
     calculate the activation time of the simplices and
@@ -107,6 +98,12 @@ function dowkerActivationTimes(M)
 
     return fv, simp
 end
+
+##########################################################################################
+
+#### 	DISTANCE FILES FUNCTIONS
+
+##########################################################################################
 
 #=
     calculates the distance matrix for a matrix with m columns
@@ -167,15 +164,11 @@ function distanceD(m)
     writedlm(FILEPATH * "\\distanceFiles\\cp_$m.txt", cp)
 end
 
+##########################################################################################
 
-function sumnchoosek(m,k)
-    sum = 0
-    for i in 1:k
-        sum += binomial(m, i)
-    end
-    return sum
-end
+#### 	BARCODE PROCESSING FUNCTIONS
 
+##########################################################################################
 
 function saveDistances(dfInput, k, folderUrl)
     println("Start with k = $k")
@@ -213,6 +206,127 @@ function saveDistances(dfInput, k, folderUrl)
     distances[2 : end, 3] = distancesDim1
     distances[2 : end, 4] = distancesDim2
     writedlm("$folderUrl\\distances_$k.csv", distances, ";")
+end
+
+##########################################################################################
+
+#### 	BENCHMARC FUNCTIONS
+
+##########################################################################################
+
+function generateMatrices(numOfMatrices, dimOfMatrices, highestEntry, relPath = "")
+    matrices = rand(Uniform(1, highestEntry), (numOfMatrices, dimOfMatrices^2))
+    matrices = map(x -> round(x, digits = 2), matrices)
+
+    if !isdir(FILEPATH * relPath)
+        mkdir(FILEPATH * relPath)
+    end
+    #=
+    if !isdir(FILEPATHMATLAB * relPath)
+        mkdir(FILEPATHMATLAB * relPath)
+    end
+    =#
+
+    writedlm(FILEPATH * relPath * "\\testMatricesDim$dimOfMatrices.txt", matrices, ' ')
+    #writedlm(FILEPATHMATLAB * relPath * "\\testMatricesDim$dimOfMatrices.txt", matrices, ' ')
+    println("Writing $(size(matrices))-matrix into file.")
+end
+
+
+function createBarcodes(dimOfMatrices, relPath = "")
+    testMatrices = readdlm(FILEPATH * relPath * "\\testMatricesDim$dimOfMatrices.txt", ' ')
+    n, m = size(testMatrices)
+    dim0 = []
+    dim1 = []
+    for i in 1 : n
+        curMatrix = reshape(testMatrices[i, :], (dimOfMatrices, dimOfMatrices))
+        C = callEirene(curMatrix)
+        push!(dim0, vec(transpose(barcode(C, dim = 0))))
+        push!(dim1, vec(transpose(barcode(C, dim = 1))))
+    end
+    writedlm(FILEPATH * relPath * "\\testMatricesDim$(dimOfMatrices)BarcodesDim0.txt", dim0, ';')
+    writedlm(FILEPATH * relPath * "\\testMatricesDim$(dimOfMatrices)BarcodesDim1.txt", dim1, ';')
+end
+
+
+function compareBarcodes(filepathmatlab, dimOfMatrices, dimOfBarcode; relPath = "")
+    fmatlab = open(filepathmatlab * "\\testMatricesDim$(dimOfMatrices)BarcodesDim$dimOfBarcode.txt", "r")
+    lmatlab = readlines(fmatlab)
+    fjulia = open(FILEPATH * relPath * "\\testMatricesDim$(dimOfMatrices)BarcodesDim$dimOfBarcode.txt", "r")
+    ljulia = readlines(fjulia)
+
+    if size(ljulia, 1) == size(lmatlab, 1)
+        result = true
+        for i = 1 : size(ljulia, 1)
+            curjulialine = split(ljulia[i], ";")
+            curmatlabline = split(lmatlab[i], ";")
+            filter!(x -> x != "", curmatlabline)
+            filter!(x -> x != "Inf", curjulialine)
+            curmatlabline = map(x -> round(parse(Float64, x), digits = 2), curmatlabline)
+            curjulialine = map(x -> parse(Float64, x), curjulialine)
+            curResult = true
+            for j = 1 : size(curjulialine, 1)
+                curResult = curResult && (curjulialine[j] in curmatlabline)
+            end
+            for k = 1 : size(curmatlabline, 1)
+                curResult = curResult && (curmatlabline[k] in curjulialine)
+            end
+            if curResult == false
+                println("Test in Matrix $i lieferte $curResult.")
+            end
+            result = result && curResult
+        end
+        if result == true
+            println("Alle Matrizen lieferten true.")
+        end
+    else
+        println("Größen unterschiedlich!")
+    end
+end
+
+
+function benchmarc(dimOfMatrices; relPath = "")
+    testMatrices = readdlm(FILEPATH * relPath * "\\testMatricesDim$dimOfMatrices.txt", ' ')
+    n, m = size(testMatrices)
+    timeTaken = []
+    curMatrix = reshape(testMatrices[1, :], (dimOfMatrices, dimOfMatrices))
+    callEirene(curMatrix)
+    for i = 1 : n
+        curMatrix = reshape(testMatrices[i, :], (dimOfMatrices, dimOfMatrices))
+        t = @elapsed callEirene(curMatrix)
+        push!(timeTaken, t)
+    end
+    return timeTaken
+end
+
+##########################################################################################
+
+#### 	MISCELLANEOUS FUNCTIONS
+
+##########################################################################################
+
+#=
+    returns the number of simplices for each dimension (up to 3)
+=#
+function numOfSimplices(M)
+    n, m = size(M)
+    ev = []
+
+    for k in 1 : 4
+        push!(ev, binomial(m, k))
+    end
+    push!(ev, 0)
+
+    return ev
+end
+
+
+function sumnchoosek(m,k)
+    sum = 0
+    for i in 1:k
+        sum += binomial(m, i)
+    end
+    return sum
 end
 
 end
