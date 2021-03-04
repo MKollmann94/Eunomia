@@ -177,7 +177,7 @@ function saveDistances(dfInput, k, folderUrl)
     distancesDim0 = []
     distancesDim1 = []
     distancesDim2 = []
-    C = callEirene(M[:, 1 : k])
+    C = eunomia(M[:, 1 : k])
     for i in 2 : (m - k) + 1
         if i % 1000 == 0
             println(i)
@@ -240,7 +240,7 @@ function createBarcodes(dimOfMatrices, relPath = "")
     dim1 = []
     for i in 1 : n
         curMatrix = reshape(testMatrices[i, :], (dimOfMatrices, dimOfMatrices))
-        C = callEirene(curMatrix)
+        C = eunomia(curMatrix)
         push!(dim0, vec(transpose(barcode(C, dim = 0))))
         push!(dim1, vec(transpose(barcode(C, dim = 1))))
     end
@@ -290,10 +290,10 @@ function benchmarc(dimOfMatrices; relPath = "")
     n, m = size(testMatrices)
     timeTaken = []
     curMatrix = reshape(testMatrices[1, :], (dimOfMatrices, dimOfMatrices))
-    callEirene(curMatrix)
+    eunomia(curMatrix)
     for i = 1 : n
         curMatrix = reshape(testMatrices[i, :], (dimOfMatrices, dimOfMatrices))
-        t = @elapsed callEirene(curMatrix)
+        t = @elapsed eunomia(curMatrix)
         push!(timeTaken, t)
     end
     return timeTaken
